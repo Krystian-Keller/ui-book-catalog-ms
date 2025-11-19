@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 import streamlit as st
+import json 
 
 from src.api_client import BookCatalogClient, ApiResponse
 from src.sample_loader import list_sample_files, load_sample_content
@@ -127,13 +128,12 @@ def books_section() -> None:
             if response.success:
                 refresh_catalog()
 
-
 def import_export_section() -> None:
     st.header("Import / Export")
     st.caption("Bulk import or export the catalog in JSON or XML.")
 
+    # ---------- IMPORT ----------
     st.subheader("Import catalog")
-    format_choice = st.radio("Import format", ("json", "xml"))
 
     sample_files = list_sample_files()
     if sample_files:
@@ -142,21 +142,39 @@ def import_export_section() -> None:
         selected_sample = "(none)"
 
     default_content = ""
+
     if selected_sample != "(none)":
-        content = load_sample_content(selected_sample)
-        if content:
-            default_content = content
+        raw = load_sample_content(selected_sample)
+        if raw:
+            # agora o textarea mostra o JSON COMPLETO
+            default_content = raw
 
-    import_content = st.text_area("Catalog content", value=default_content, height=200)
+    import_content = st.text_area("Catalog content", value=default_content, height=250)
+
     if st.button("Import catalog"):
-        response = client.import_catalog(format_choice, import_content)
-        if response.success and isinstance(response.data, dict):
-            count = response.data.get("count", 0)
-            st.success(f"Import completed: {count} books added")
-            refresh_catalog()
-        else:
-            display_status(response, "Import failed")
+        try:
+            parsed = json.loads(import_content)
 
+            # extraímos o formato real do arquivo, ignorando o rádio
+            fmt = parsed.get("format")
+            inner_content = parsed.get("content")
+
+            if not fmt or not inner_content:
+                st.error("Invalid payload: expected keys 'format' and 'content'")
+                return
+
+            response = client.import_catalog(fmt, inner_content)
+
+            if response.success:
+                count = response.data.get("count", 0)
+                st.success(f"Import completed: {count} books added")
+                refresh_catalog()
+            else:
+                display_status(response, "Import failed")
+        except Exception as e:
+            st.error(f"Invalid JSON input: {e}")
+
+    # ---------- EXPORT ----------
     st.divider()
     st.subheader("Export catalog")
     export_format = st.radio("Export format", ("json", "xml"))
@@ -167,6 +185,7 @@ def import_export_section() -> None:
             st.text_area("Exported content", value=content, height=200, disabled=True)
         else:
             display_status(response, "Export failed")
+
 
 
 def undo_section() -> None:
