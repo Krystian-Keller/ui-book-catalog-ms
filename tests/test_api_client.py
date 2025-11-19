@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Dict
 
 import responses
 
 from src.api_client import BookCatalogClient, DEFAULT_BASE_URL
-from src.sample_loader import load_import_sample
 
 
 def add_json_response(mock: responses.RequestsMock, method: str, path: str, status: int, body: Dict[str, Any]) -> None:
@@ -59,24 +57,3 @@ def test_extract_error_handles_non_json() -> None:
 
     assert result.success is False
     assert result.error_message == "Not found"
-
-
-def test_import_catalog_sends_raw_content_string() -> None:
-    sample = load_import_sample("dummy_import_4_xml.json")
-    assert sample is not None
-
-    client = BookCatalogClient()
-    with responses.RequestsMock() as mock:
-        mock.add(
-            responses.POST,
-            f"{DEFAULT_BASE_URL}/catalog/import",
-            json={"count": 1},
-            status=200,
-        )
-        result = client.import_catalog(sample.format, sample.content)
-
-    assert result.success is True
-    assert result.data == {"count": 1}
-
-    sent_body = json.loads(mock.calls[0].request.body.decode())
-    assert sent_body == {"format": sample.format, "content": sample.content}

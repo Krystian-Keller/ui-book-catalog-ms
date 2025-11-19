@@ -5,8 +5,8 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-from src.api_client import ApiResponse, BookCatalogClient
-from src.sample_loader import ImportSample, list_sample_files, load_import_sample
+from src.api_client import BookCatalogClient, ApiResponse
+from src.sample_loader import list_sample_files, load_sample_content
 
 
 st.set_page_config(page_title="Book Catalog UI", layout="wide")
@@ -43,13 +43,6 @@ def get_cached_catalog() -> List[Dict[str, Any]]:
     if "catalog" not in st.session_state:
         return refresh_catalog()
     return st.session_state["catalog"]
-
-
-def ensure_import_state_defaults() -> None:
-    """Initialize import-related state used by the import/export section."""
-    st.session_state.setdefault("import_format", "json")
-    st.session_state.setdefault("import_content", "")
-    st.session_state.setdefault("loaded_sample", "(none)")
 
 
 # ---------- UI sections ----------
@@ -135,41 +128,26 @@ def books_section() -> None:
                 refresh_catalog()
 
 
-def _apply_sample_selection(selected_sample: str) -> None:
-    """Update import format/content state when a sample file is chosen."""
-    if selected_sample == "(none)" or selected_sample == st.session_state.get("loaded_sample"):
-        return
-    sample: ImportSample | None = load_import_sample(selected_sample)
-    if sample is None:
-        st.warning("Unable to read the selected sample file.")
-        return
-    st.session_state["import_format"] = sample.format
-    st.session_state["import_content"] = sample.content
-    st.session_state["loaded_sample"] = selected_sample
-
-
 def import_export_section() -> None:
     st.header("Import / Export")
     st.caption("Bulk import or export the catalog in JSON or XML.")
 
-    ensure_import_state_defaults()
-
     st.subheader("Import catalog")
+    format_choice = st.radio("Import format", ("json", "xml"))
 
     sample_files = list_sample_files()
-    selected_sample = st.selectbox(
-        "Load sample file", ["(none)"] + sample_files, key="selected_sample"
-    )
-    _apply_sample_selection(selected_sample)
+    if sample_files:
+        selected_sample = st.selectbox("Load sample file", ["(none)"] + sample_files)
+    else:
+        selected_sample = "(none)"
 
-    format_choice = st.radio("Import format", ("json", "xml"), key="import_format")
-    import_content = st.text_area(
-        "Catalog content",
-        value=st.session_state["import_content"],
-        key="import_content",
-        height=200,
-    )
+    default_content = ""
+    if selected_sample != "(none)":
+        content = load_sample_content(selected_sample)
+        if content:
+            default_content = content
 
+    import_content = st.text_area("Catalog content", value=default_content, height=200)
     if st.button("Import catalog"):
         response = client.import_catalog(format_choice, import_content)
         if response.success and isinstance(response.data, dict):
